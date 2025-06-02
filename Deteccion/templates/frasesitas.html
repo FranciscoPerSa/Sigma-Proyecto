@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video</title>
+    <style>
+        /* General Styles */
+        body {
+            background-color: rgba(19, 31, 36, 1);
+            background-image: url('static/sigma.jpg');
+            background-size: cover;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            overflow: hidden; /* Evita scroll */
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start; /* Alinea desde arriba */
+            height: 100vh;
+            color: white;
+            padding: 5px; /* Padding más reducido */
+        }
+
+        .content {
+            text-align: center;
+            width: 100%; /* Ocupa todo el ancho disponible */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+        }
+
+        h1 {
+            color: #0dce71; /* Color verde para el título h1 */
+            margin-top: 10px; /* Reduce el margen superior */
+            margin-bottom: 10px; /* Reduce el margen inferior */
+            font-size: 1.8em; /* Tamaño más pequeño */
+        }
+
+        footer .ter-button,
+        footer .camera-button {
+            background-color: #6c5ce7; /* Purple color */
+            border: none;
+            padding: 15px;
+            border-radius: 10px;
+            cursor: pointer;
+            margin: 10px; /* Margin between buttons */
+            color: white;
+            font-size: 16px;
+            width: 100%; /* Full width buttons on mobile */
+        }
+
+        /* Estilos para el video */
+        .content video {
+            border: 5px solid #c3ead7; /* Borde sólido de color verde */
+            border-radius: 10px; /* Bordes redondeados */
+            width: 98vw; /* Ocupa 98% del ancho de la pantalla */
+            height: 88vh; /* Ocupa 88% del alto de la pantalla */
+            object-fit: cover; /* Mantiene la proporción del video */
+            transform: scaleX(-1); /* Invierte el video horizontalmente (efecto espejo) */
+        }
+
+        /* Área de detección de letras */
+        .letter-detection {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 15px;
+            border: 3px solid #0dce71;
+            min-width: 300px;
+            text-align: center;
+        }
+
+        .detected-letter {
+            font-size: 4em;
+            font-weight: bold;
+            color: #0dce71;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .letter-label {
+            font-size: 1.2em;
+            color: white;
+            margin-bottom: 10px;
+        }
+
+        .detection-status {
+            font-size: 0.9em;
+            color: #c3ead7;
+            font-style: italic;
+        }
+
+        /* Estilos para la animación del peluche */
+        .peluche {
+            position: fixed;
+            bottom: -200px; /* Inicialmente fuera de la pantalla */
+            right: -200px; /* Inicialmente fuera de la pantalla */
+            width: 150px; /* Ancho del peluche */
+            height: auto;
+            transition: bottom 2s ease-in-out, right 2s ease-in-out;
+            z-index: 100; /* Asegura que esté por encima del video */
+        }
+
+        .peluche.visible {
+            bottom: 20px; /* Posición final */
+            right: 20px; /* Posición final */
+        }
+
+        /* Estilos para el botón de cerrar */
+        .close-btn {
+            position: fixed;
+            top: 10px;
+            right: 0px;
+            background-color: #131f24; /* Red color */
+            border: none;
+            padding: 10px;
+            border-radius: 50%;
+            cursor: pointer;
+            color: white;
+            font-size: 16px;
+            z-index: 1000; /* Ensure the button is above other elements */
+        }
+
+        /* Responsiveness */
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 1.5em; /* Smaller font size for smaller screens */
+                margin-top: 5px;
+                margin-bottom: 5px;
+            }
+
+            footer .ter-button,
+            footer .camera-button {
+                font-size: 14px; /* Smaller font size for buttons */
+            }
+
+            .peluche {
+                width: 100px; /* Smaller peluche for smaller screens */
+            }
+
+            .content video {
+                width: 99vw; /* Más ancho en móviles */
+                height: 85vh; /* Ajuste de altura en móviles */
+            }
+
+            .letter-detection {
+                min-width: 250px;
+                padding: 15px;
+            }
+
+            .detected-letter {
+                font-size: 3em;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>¡Hora de Aprender Lenguaje de Señas!</h1>
+        <main>
+            <div class="content">
+                <video id="videoElement" autoplay muted playsinline></video>
+                
+                <!-- Área de detección de letras -->
+                <div class="letter-detection">
+                    <div class="detected-letter" id="detectedLetter">-</div>
+                    <div class="letter-label">Letra Detectada</div>
+                    <div class="detection-status" id="detectionStatus">Mueve tus manos para detectar letras</div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Canvas oculto para detección de movimiento -->
+    <canvas id="motionCanvas" style="display: none;"></canvas>
+
+    <!-- Imagen del peluche -->
+    <img src="./static/peluche.gif" alt="Peluche" class="peluche" id="peluche">
+    <!-- Botón de cerrar -->
+    <button class="close-btn" id="closeBtn">X</button>
+
+    <script>
+        let video, canvas, ctx;
+        let previousFrame = null;
+        let motionThreshold = 30;
+        let detectionCooldown = false;
+        const letters = ['hola', 'gracias', 'disculpa', 'te amo', 'adios'];
+
+        // Función para inicializar la cámara
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 },
+                        facingMode: 'user' // Cámara frontal
+                    } 
+                });
+                video = document.getElementById('videoElement');
+                video.srcObject = stream;
+                
+                // Inicializar detección de movimiento cuando el video esté listo
+                video.addEventListener('loadedmetadata', initMotionDetection);
+                
+            } catch (error) {
+                console.error('Error al acceder a la cámara:', error);
+                alert('No se pudo acceder a la cámara. Por favor, permite el acceso a la cámara.');
+            }
+        }
+
+        // Función para inicializar la detección de movimiento
+        function initMotionDetection() {
+            canvas = document.getElementById('motionCanvas');
+            ctx = canvas.getContext('2d');
+            canvas.width = 320; // Resolución reducida para mejor rendimiento
+            canvas.height = 240;
+            
+            // Comenzar detección de movimiento
+            setInterval(detectMotion, 200); // Verificar cada 200ms
+        }
+
+        // Función para detectar movimiento
+        function detectMotion() {
+            if (!video || video.readyState !== 4) return;
+
+            // Dibujar frame actual en canvas
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const currentFrame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+            if (previousFrame) {
+                let motionLevel = 0;
+                const pixels = currentFrame.data.length;
+
+                // Comparar frames para detectar movimiento
+                for (let i = 0; i < pixels; i += 4) {
+                    const rDiff = Math.abs(currentFrame.data[i] - previousFrame.data[i]);
+                    const gDiff = Math.abs(currentFrame.data[i + 1] - previousFrame.data[i + 1]);
+                    const bDiff = Math.abs(currentFrame.data[i + 2] - previousFrame.data[i + 2]);
+                    const totalDiff = rDiff + gDiff + bDiff;
+
+                    if (totalDiff > motionThreshold) {
+                        motionLevel++;
+                    }
+                }
+
+                // Si hay suficiente movimiento y no estamos en cooldown
+                if (motionLevel > 1000 && !detectionCooldown) {
+                    detectLetter();
+                }
+            }
+
+            previousFrame = currentFrame;
+        }
+
+        // Función para "detectar" una letra (simulado)
+        function detectLetter() {
+            if (detectionCooldown) return;
+
+            // Seleccionar letra aleatoria
+            const randomLetter = letters[Math.floor(Math.random() * letters.length)];
+            
+            // Mostrar letra detectada
+            document.getElementById('detectedLetter').textContent = randomLetter;
+            document.getElementById('detectionStatus').textContent = `¡Letra ${randomLetter} detectada!`;
+            
+            // Efecto visual
+            const letterElement = document.getElementById('detectedLetter');
+            letterElement.style.transform = 'scale(1.2)';
+            letterElement.style.color = '#00ff88';
+            
+            setTimeout(() => {
+                letterElement.style.transform = 'scale(1)';
+                letterElement.style.color = '#0dce71';
+            }, 300);
+
+            // Cooldown para evitar detecciones muy rápidas
+            detectionCooldown = true;
+            setTimeout(() => {
+                detectionCooldown = false;
+                document.getElementById('detectionStatus').textContent = 'Mueve tus manos para detectar letras';
+            }, 2000);
+        }
+
+        // Esperar a que la página se cargue completamente
+        window.onload = function () {
+            // Inicializar la cámara
+            initCamera();
+            
+            // Añadir la clase visible al peluche para iniciar la animación
+            document.getElementById('peluche').classList.add('visible');
+        }
+
+        // Funcionalidad del botón de cerrar
+        document.getElementById('closeBtn').onclick = function () {
+            document.getElementById('peluche').classList.remove('visible');
+            document.getElementById('closeBtn').style.display = 'none';
+        }
+    </script>
+</body>
+
+</html>
